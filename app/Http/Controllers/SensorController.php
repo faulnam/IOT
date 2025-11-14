@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\SensorData;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class SensorController extends Controller
 {
@@ -15,7 +16,7 @@ class SensorController extends Controller
     {
         $latestData = SensorData::latest()->first();
         $recentData = SensorData::latest()->take(20)->get();
-        
+
         return view('dashboard', compact('latestData', 'recentData'));
     }
 
@@ -25,9 +26,20 @@ class SensorController extends Controller
      */
     public function store(Request $request)
     {
+        // Log raw incoming request for debugging tunnel/forwarding issues
+        try {
+            Log::info('Incoming /api/sensor-data request', [
+                'content' => $request->getContent(),
+                'headers' => $request->headers->all(),
+                'ip' => $request->ip()
+            ]);
+        } catch (\Throwable $e) {
+            // Prevent logging from breaking the endpoint
+        }
+
         $validator = Validator::make($request->all(), [
-            'temperature' => 'required|numeric',
-            'humidity' => 'required|numeric|min:0|max:100',
+            'adc' => 'required|numeric',
+            'status' => 'nullable|string|max:255',
             'device_id' => 'nullable|string|max:255',
             'location' => 'nullable|string|max:255'
         ]);
@@ -42,8 +54,8 @@ class SensorController extends Controller
 
         try {
             $sensorData = SensorData::create([
-                'temperature' => $request->temperature,
-                'humidity' => $request->humidity,
+                'adc' => (int) $request->adc,
+                'status' => $request->status ?? null,
                 'device_id' => $request->device_id ?? 'wokwi-01',
                 'location' => $request->location ?? 'Lab IoT'
             ]);
@@ -55,6 +67,16 @@ class SensorController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
+            // Log exception details for easier debugging
+            try {
+                Log::error('SensorController@store exception', [
+                    'message' => $e->getMessage(),
+                    'payload' => $request->getContent()
+                ]);
+            } catch (\Throwable $ex) {
+                // ignore
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal menyimpan data',
@@ -128,15 +150,10 @@ class SensorController extends Controller
     {
         try {
             $stats = [
-                'temperature' => [
-                    'avg' => SensorData::avg('temperature'),
-                    'min' => SensorData::min('temperature'),
-                    'max' => SensorData::max('temperature'),
-                ],
-                'humidity' => [
-                    'avg' => SensorData::avg('humidity'),
-                    'min' => SensorData::min('humidity'),
-                    'max' => SensorData::max('humidity'),
+                'adc' => [
+                    'avg' => SensorData::avg('adc'),
+                    'min' => SensorData::min('adc'),
+                    'max' => SensorData::max('adc'),
                 ],
                 'total_records' => SensorData::count(),
                 'latest_record' => SensorData::latest()->first()

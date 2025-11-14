@@ -12,15 +12,14 @@ class SensorData extends Model
     protected $table = 'sensor_data';
 
     protected $fillable = [
-        'temperature',
-        'humidity',
+        'adc',
+        'status',
         'device_id',
         'location'
     ];
 
     protected $casts = [
-        'temperature' => 'float',
-        'humidity' => 'float',
+        'adc' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

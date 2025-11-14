@@ -13,8 +13,10 @@ return new class extends Migration
     {
         Schema::create('sensor_data', function (Blueprint $table) {
             $table->id();
-            $table->float('temperature'); // Suhu dalam Celsius
-            $table->float('humidity'); // Kelembapan dalam persen
+            // ADC reading dari sensor gas (mis. MQ2) — nilai digital dari mikrokontroler
+            $table->integer('adc');
+            // Status teks seperti "AMAN" atau "DARURAT"
+            $table->string('status')->nullable();
             $table->string('device_id')->nullable(); // ID perangkat IoT
             $table->string('location')->nullable(); // Lokasi sensor
             $table->timestamps();
