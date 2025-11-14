@@ -60,6 +60,51 @@ class SensorController extends Controller
                 'location' => $request->location ?? 'Lab IoT'
             ]);
 
+            // Jika status bahaya, kirim notifikasi via helper `sendTelegram`
+            try {
+                if (!empty($sensorData->status) && strcasecmp($sensorData->status, 'DARURAT') === 0) {
+                    $when = $sensorData->created_at ? $sensorData->created_at->toDateTimeString() : now()->toDateTimeString();
+                    $msg = "🚨 *Gas Alert* 🚨\n" .
+                           "Status: *{$sensorData->status}*\n" .
+                           "ADC: `{$sensorData->adc}`\n" .
+                           "Device: {$sensorData->device_id}\n" .
+                           "Location: {$sensorData->location}\n" .
+                           "Waktu: {$when}";
+
+                    // Panggil helper — pastikan helper sudah ter-load (app/Helpers/telegram.php)
+                    $token = env('TELEGRAM_BOT_TOKEN');
+                    $chatId = env('TELEGRAM_CHAT_ID');
+                    if (empty($token) || empty($chatId)) {
+                        Log::warning('Telegram env not configured, cannot send alert', ['has_token' => !empty($token), 'has_chat' => !empty($chatId)]);
+                    } else {
+                        if (function_exists('sendTelegram')) {
+                            try {
+                                $res = sendTelegram($msg);
+                                // If response is a Laravel HTTP client response, we can inspect it
+                                if (is_object($res) && method_exists($res, 'successful')) {
+                                    if ($res->successful()) {
+                                        Log::info('Telegram notification sent successfully', ['chat_id' => $chatId]);
+                                    } else {
+                                        $status = method_exists($res, 'status') ? $res->status() : null;
+                                        $body = method_exists($res, 'body') ? $res->body() : null;
+                                        Log::warning('Telegram notification failed', ['status' => $status, 'body' => $body]);
+                                    }
+                                } else {
+                                    // unknown return type — log and continue
+                                    Log::info('sendTelegram returned', ['result' => $res]);
+                                }
+                            } catch (\Throwable $e) {
+                                Log::warning('Exception when calling sendTelegram', ['error' => $e->getMessage()]);
+                            }
+                        } else {
+                            Log::warning('sendTelegram helper not found when trying to send alert', ['payload' => $msg]);
+                        }
+                    }
+                }
+            } catch (\Throwable $notifyEx) {
+                Log::warning('Failed to send Telegram notification', ['error' => $notifyEx->getMessage()]);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Data berhasil disimpan',
