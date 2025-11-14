@@ -272,10 +272,11 @@
                 sensorChart.data.labels = chartData.labels;
                 sensorChart.data.datasets[0].data = chartData.adc;
 
-                // adjust y axis max/min if we have values
-                if (chartData.adc.length) {
-                    const max = Math.max(...chartData.adc);
-                    const min = Math.min(...chartData.adc);
+                // adjust y axis max/min using only numeric ADC values (ignore nulls)
+                const numericValues = chartData.adc.filter(v => typeof v === 'number' && isFinite(v));
+                if (numericValues.length) {
+                    const max = Math.max(...numericValues);
+                    const min = Math.min(...numericValues);
                     sensorChart.options.scales.y.max = Math.ceil(max * 1.05);
                     sensorChart.options.scales.y.min = Math.floor(Math.min(0, min * 0.95));
                 }
@@ -329,8 +330,33 @@
         // Initialize
         window.addEventListener('load', () => {
             initChart();
+            // Load timeseries ADC from API
             loadChartData();
         });
+
+        // Static sample data loader (for testing chart rendering)
+        function loadStaticChart() {
+            const now = new Date();
+            const labels = [];
+            const values = [];
+
+            // generate 12 sample points (every 2 minutes back)
+            for (let i = 11; i >= 0; i--) {
+                const d = new Date(now.getTime() - i * 2 * 60 * 1000);
+                labels.push(d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
+                // sample ADC values between 1000 and 4000
+                const v = Math.round(1000 + Math.random() * 3000);
+                values.push(v);
+            }
+
+            chartData.labels = labels;
+            chartData.adc = values;
+
+            if (!sensorChart) initChart();
+            sensorChart.data.labels = chartData.labels;
+            sensorChart.data.datasets[0].data = chartData.adc;
+            sensorChart.update();
+        }
     </script>
 </body>
 </html>
