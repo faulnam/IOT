@@ -192,19 +192,22 @@
                 sensorChart = null;
             }
 
+            // Create chart with empty data; we'll update it after fetching
             sensorChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: chartData.labels,
+                    labels: [],
                     datasets: [
-                            {
-                                label: 'ADC',
-                                data: chartData.adc,
-                                borderColor: 'rgba(220, 38, 38, 1)',
-                                backgroundColor: 'rgba(254, 202, 202, 0.4)',
-                                tension: 0.25,
-                                fill: true
-                            }
+                        {
+                            label: 'ADC',
+                            data: [],
+                            borderColor: 'rgba(220, 38, 38, 1)',
+                            backgroundColor: 'rgba(254, 202, 202, 0.4)',
+                            tension: 0.25,
+                            fill: true,
+                            pointRadius: 3,
+                            pointHoverRadius: 5
+                        }
                     ]
                 },
                 options: {
@@ -222,7 +225,8 @@
                     },
                     scales: {
                         y: {
-                            beginAtZero: true
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
                         }
                     }
                 }
@@ -235,24 +239,48 @@
                 const response = await fetch('/api/sensor-data?limit=20');
                 const result = await response.json();
 
-                if (result.success) {
-                    const data = result.data.reverse(); // Reverse agar urut dari lama ke baru
+                console.debug('loadChartData result', result);
 
-                    chartData.labels = data.map(item => {
-                        const date = new Date(item.created_at);
-                        return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                    });
-                        chartData.adc = data.map(item => item.adc);
-
-                    if (sensorChart) {
-                        sensorChart.data.labels = chartData.labels || [];
-                        sensorChart.data.datasets[0].data = chartData.adc || [];
-                        sensorChart.update();
-                    } else {
-                        // if chart not initialized (e.g. ctx missing), try to init
-                        initChart();
-                    }
+                if (!result || !result.success) {
+                    console.warn('No chart data available or API returned error');
+                    // Initialize chart if missing
+                    if (!sensorChart) initChart();
+                    return;
                 }
+
+                const data = (result.data || []).slice().reverse(); // from old -> new
+
+                const labels = data.map(item => {
+                    const date = new Date(item.created_at);
+                    return isNaN(date) ? item.created_at : date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                });
+
+                const adcValues = data.map(item => {
+                    // ensure numeric; keep nulls so labels/data lengths match
+                    const v = Number(item.adc);
+                    return Number.isFinite(v) ? v : null;
+                });
+
+                console.debug('chart labels length:', labels.length, 'adcValues length:', adcValues.length);
+
+                chartData.labels = labels;
+                chartData.adc = adcValues;
+
+                if (!sensorChart) initChart();
+
+                // update chart dataset
+                sensorChart.data.labels = chartData.labels;
+                sensorChart.data.datasets[0].data = chartData.adc;
+
+                // adjust y axis max/min if we have values
+                if (chartData.adc.length) {
+                    const max = Math.max(...chartData.adc);
+                    const min = Math.min(...chartData.adc);
+                    sensorChart.options.scales.y.max = Math.ceil(max * 1.05);
+                    sensorChart.options.scales.y.min = Math.floor(Math.min(0, min * 0.95));
+                }
+
+                sensorChart.update();
             } catch (error) {
                 console.error('Error loading chart data:', error);
             }
